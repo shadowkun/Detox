@@ -2,13 +2,19 @@ jest.mock('../../../utils/logger.js');
 const StartupAndTestRecorderPlugin = require('./StartupAndTestRecorderPlugin');
 const ArtifactsApi = require('./__mocks__/ArtifactsApi.mock');
 const testSummaries = require('./__mocks__/testSummaries.mock');
+const ArtifactMock = require('../artifact/__mocks__/ArtifactMock');
 
 describe('StartupAndTestRecorderPlugin', () => {
   let api;
   let plugin;
 
   beforeEach(() => {
-    api = new ArtifactsApi();
+    api = new ArtifactsApi({
+      config: {
+        enabled: false,
+        keepOnlyFailedTestsArtifacts: false,
+      },
+    });
     plugin = new FakeStartupAndTestRecorderPlugin({ api });
   });
 
@@ -367,14 +373,7 @@ class FakeStartupAndTestRecorderPlugin extends StartupAndTestRecorderPlugin {
   }
 
   _createArtifactMock(type) {
-    const artifact = {
-      type,
-      start: jest.fn(),
-      stop: jest.fn(),
-      save: jest.fn(),
-      discard: jest.fn(),
-    };
-
+    const artifact = new ArtifactMock(type);
     this.createdArtifacts.push(artifact);
     return artifact;
   }

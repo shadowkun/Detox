@@ -4,9 +4,10 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.util.Log;
 
+import com.wix.detox.reactnative.ReactNativeExtension;
 import com.wix.detox.systeminfo.Environment;
 import com.wix.invoke.MethodInvocation;
 
@@ -80,7 +81,7 @@ class DetoxManager implements WebSocketClient.ActionHandler {
                 if (stopping) return;
                 stopping = true;
 
-                testEngineFacade.hardResetReactNative(reactNativeHostHolder);
+                testEngineFacade.resetReactNative();
 
                 actionHandlers.clear();
                 readyActionHandler = null;
@@ -118,9 +119,7 @@ class DetoxManager implements WebSocketClient.ActionHandler {
     }
 
     private void initReactNativeIfNeeded() {
-        if (ReactNativeSupport.isReactNativeApp()) {
-            ReactNativeCompat.waitForReactNativeLoad(reactNativeHostHolder);
-        }
+        ReactNativeExtension.waitForRNBootstrap(reactNativeHostHolder);
     }
 
     private void initWSClient() {
@@ -139,7 +138,7 @@ class DetoxManager implements WebSocketClient.ActionHandler {
         actionHandlers.put("reactNativeReload", new ReactNativeReloadActionHandler(reactNativeHostHolder, wsClient, testEngineFacade));
         actionHandlers.put("invoke", new InvokeActionHandler(new MethodInvocation(), wsClient));
         actionHandlers.put("currentStatus", new QueryStatusActionHandler(wsClient, testEngineFacade));
-        actionHandlers.put("cleanup", new CleanupActionHandler(reactNativeHostHolder, wsClient, testEngineFacade, new Function0<Unit>() {
+        actionHandlers.put("cleanup", new CleanupActionHandler(wsClient, testEngineFacade, new Function0<Unit>() {
             @Override
             public Unit invoke() {
                 stop();

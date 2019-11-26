@@ -1,6 +1,7 @@
 const _ = require('lodash');
 const chalk = require('chalk').default;
 const ReporterBase = require('./ReporterBase');
+const log = require('../../src/utils/logger').child();
 
 class WorkerAssignReporterImpl extends ReporterBase {
   constructor(detox) {
@@ -9,10 +10,12 @@ class WorkerAssignReporterImpl extends ReporterBase {
   }
 
   report(workerName) {
-    const deviceName = _.attempt(() => this.device.name);
+    let deviceName = _.attempt(() => this.device.name);
     if (!_.isError(deviceName)) {
-      this._traceln(`${chalk.whiteBright(workerName)} assigned to ${chalk.blueBright(this.device.name)}\n`);
+      deviceName = undefined;
     }
+
+    log.info({event: 'WORKER_ASSIGN'}, `${chalk.whiteBright(workerName)} assigned to ${chalk.blueBright(deviceName)}`);
   }
 }
 

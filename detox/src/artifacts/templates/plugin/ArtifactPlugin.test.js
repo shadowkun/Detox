@@ -1,16 +1,23 @@
 jest.mock('../../../utils/logger');
 const logger = require('../../../utils/logger');
 const ArtifactPlugin = require('./ArtifactPlugin');
+const FileArtifact = require('../artifact/FileArtifact');
 const testSummaries = require('./__mocks__/testSummaries.mock');
 
 class TestArtifactPlugin extends ArtifactPlugin {}
 
-describe(ArtifactPlugin, () => {
+describe('ArtifactPlugin', () => {
   let api;
   let plugin;
 
   beforeEach(() => {
-    api = {};
+    api = {
+      userConfig: {
+        enabled: false,
+        keepOnlyFailedTestsArtifacts: false,
+      },
+    };
+
     plugin = new TestArtifactPlugin({ api });
   });
 
@@ -176,8 +183,13 @@ describe(ArtifactPlugin, () => {
       });
     });
 
-    it('should have .onUserAction', async () => {
-      await expect(plugin.onUserAction()).resolves.toBe(void 0);
+    it('should have .onCreateExternalArtifact', async () => {
+      await expect(plugin.onCreateExternalArtifact({
+        name: 'The custom artifact',
+        artifact: new FileArtifact({
+          temporaryPath: '/tmp/path/to/artifact.file'
+        }),
+      })).resolves.toBe(void 0);
     });
 
     it('should have .onBeforeAll, which resets context.testSummary if called', async () => {
@@ -247,6 +259,14 @@ describe(ArtifactPlugin, () => {
     describe('if should not keep specifically failed test artifacts', () => {
       beforeEach(() => {
         plugin.keepOnlyFailedTestsArtifacts = false;
+        plugin.enabled = true;
+      });
+
+      it('should return false if it is disabled', () => {
+        plugin.enabled = false;
+        expect(plugin.shouldKeepArtifactOfTest(testSummaries.running())).toBe(false);
+        expect(plugin.shouldKeepArtifactOfTest(testSummaries.passed())).toBe(false);
+        expect(plugin.shouldKeepArtifactOfTest(testSummaries.failed())).toBe(false);
       });
 
       it('should return true for testSummary.status === running', () =>
@@ -262,6 +282,14 @@ describe(ArtifactPlugin, () => {
     describe('if should keep only failed test artifacts', () => {
       beforeEach(() => {
         plugin.keepOnlyFailedTestsArtifacts = true;
+        plugin.enabled = true;
+      });
+
+      it('should return false if it is disabled', () => {
+        plugin.enabled = false;
+        expect(plugin.shouldKeepArtifactOfTest(testSummaries.running())).toBe(false);
+        expect(plugin.shouldKeepArtifactOfTest(testSummaries.passed())).toBe(false);
+        expect(plugin.shouldKeepArtifactOfTest(testSummaries.failed())).toBe(false);
       });
 
       it('should return false for testSummary.status === running', () =>

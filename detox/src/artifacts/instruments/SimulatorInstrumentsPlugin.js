@@ -1,16 +1,11 @@
-const fs = require('fs-extra');
-const tempfile = require('tempfile');
-const argparse = require('../../utils/argparse');
-const log = require('../../utils/logger').child({ __filename });
+const temporaryPath = require('../utils/temporaryPath');
 const WholeTestRecorderPlugin = require('../templates/plugin/WholeTestRecorderPlugin');
 const SimulatorInstrumentsRecording = require('./SimulatorInstrumentsRecording');
 
 class SimulatorInstrumentsPlugin extends WholeTestRecorderPlugin {
-  constructor(config) {
-    super(config);
-
-    this.client = config.client;
-    this.enabled = argparse.getArgValue('record-performance') === 'all';
+  constructor({ api, client }) {
+    super({ api });
+    this.client = client;
   }
 
   async onBeforeUninstallApp(event) {
@@ -57,12 +52,28 @@ class SimulatorInstrumentsPlugin extends WholeTestRecorderPlugin {
   createTestRecording() {
     return new SimulatorInstrumentsRecording({
       client: this.client,
-      temporaryRecordingPath: tempfile('.dtxrec'),
+      temporaryRecordingPath: temporaryPath.for.dtxrec(),
     });
   }
 
   async preparePathForTestArtifact(testSummary) {
     return this.api.preparePathForArtifact('test.dtxrec', testSummary);
+  }
+
+  static parseConfig(config) {
+    switch (config) {
+      case 'all':
+        return {
+          enabled: true,
+          keepOnlyFailedTestsArtifacts: false,
+        };
+      case 'none':
+      default:
+        return {
+          enabled: false,
+          keepOnlyFailedTestsArtifacts: false,
+        };
+    }
   }
 }
 

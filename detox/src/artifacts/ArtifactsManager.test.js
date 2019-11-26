@@ -3,13 +3,16 @@ const sleep = require('../utils/sleep');
 const testSummaries = require('./templates/plugin/__mocks__/testSummaries.mock');
 
 describe('ArtifactsManager', () => {
-  let proxy;
+  let proxy, FakePathBuilder;
 
   beforeEach(() => {
     jest.mock('fs-extra');
+    jest.mock('./__mocks__/FakePathBuilder');
     jest.mock('./utils/ArtifactPathBuilder');
     jest.mock('../utils/argparse');
     jest.mock('../utils/logger');
+
+    FakePathBuilder = require('./__mocks__/FakePathBuilder');
 
     proxy = {
       get ArtifactPathBuilder() {
@@ -34,22 +37,37 @@ describe('ArtifactsManager', () => {
     let artifactsManager;
 
     beforeEach(() => {
-      proxy.argparse.getArgValue.mockImplementation((key) => {
-        return (key === 'artifacts-location') ? '/tmp' : '';
+      artifactsManager = new proxy.ArtifactsManager({
+        rootDir: '/tmp',
+        plugins: {},
       });
-
-      artifactsManager = new proxy.ArtifactsManager();
     });
 
     it('should provide artifacts location to path builder', async () => {
       expect(proxy.ArtifactPathBuilder).toHaveBeenCalledWith({
-        artifactsRootDir: '/tmp',
+        rootDir: '/tmp',
       });
     });
 
     it('should correctly terminate itself (without errors)', async () => {
       await artifactsManager.onTerminate();
     });
+
+    describe('with { pathBuilder } instance', () => {
+      it('should require that module as pathBuilder', () => {
+        const pathBuilder = new FakePathBuilder();
+        artifactsManager = new proxy.ArtifactsManager({ pathBuilder });
+        expect(artifactsManager._pathBuilder).toBe(pathBuilder);
+      });
+    })
+
+    describe('with { pathBuilder } function', () => {
+      it('should require that module as pathBuilder', () => {
+        const pathBuilder = jest.fn(() => new FakePathBuilder());
+        artifactsManager = new proxy.ArtifactsManager({ pathBuilder, rootDir: '/tmp/42' });
+        expect(pathBuilder).toHaveBeenCalledWith({ rootDir: '/tmp/42' });
+      });
+    })
   });
 
   describe('when plugin factory is registered', () => {
@@ -60,12 +78,18 @@ describe('ArtifactsManager', () => {
         onBeforeLaunchApp: jest.fn(),
       });
 
-      artifactsManager = new proxy.ArtifactsManager();
+      artifactsManager = new proxy.ArtifactsManager({
+        rootDir: '/tmp',
+        plugins: {
+          mock: { setting: 'value' },
+        },
+      });
       artifactsManager.registerArtifactPlugins({ mock: factory });
     });
 
     it('should get called immediately', () => {
       expect(factory).toHaveBeenCalledWith(expect.objectContaining({
+        userConfig: { setting: 'value' },
         preparePathForArtifact: expect.any(Function),
         trackArtifact: expect.any(Function),
         untrackArtifact: expect.any(Function),
@@ -86,6 +110,7 @@ describe('ArtifactsManager', () => {
 
         return (testPlugin = {
           name: 'testPlugin',
+          userConfig: api.userConfig,
           disable: jest.fn(),
           onBootDevice: jest.fn(),
           onBeforeShutdownDevice: jest.fn(),
@@ -94,7 +119,7 @@ describe('ArtifactsManager', () => {
           onBeforeTerminateApp: jest.fn(),
           onBeforeLaunchApp: jest.fn(),
           onLaunchApp: jest.fn(),
-          onUserAction: jest.fn(),
+          onCreateExternalArtifact: jest.fn(),
           onBeforeAll: jest.fn(),
           onBeforeEach: jest.fn(),
           onAfterEach: jest.fn(),
@@ -103,12 +128,22 @@ describe('ArtifactsManager', () => {
         });
       };
 
-      pathBuilder = {
-        buildPathForTestArtifact: jest.fn(),
-      };
+      pathBuilder = new FakePathBuilder();
+      artifactsManager = new proxy.ArtifactsManager({
+        pathBuilder,
+        plugins: {
+          testPlugin: {
+            lifecycle: 'all',
+          }
+        }
+      });
+      artifactsManager.registerArtifactPlugins({ testPlugin: testPluginFactory });
+    });
 
-      artifactsManager = new proxy.ArtifactsManager(pathBuilder);
-      artifactsManager.registerArtifactPlugins({ testPluginFactory });
+    describe('.userConfig', () => {
+      it('should contain plugin config', async () => {
+        expect(artifactsApi.userConfig).toEqual({ lifecycle: 'all' });
+      });
     });
 
     describe('.preparePathForArtifact()', () => {
@@ -261,11 +296,10 @@ describe('ArtifactsManager', () => {
           deviceId: 'testDeviceId',
         }));
 
-        itShouldCatchErrorsOnPhase('onUserAction', () => ({
-          type: 'takeScreenshot',
-          options: {
-            name: 'open app',
-          }
+        itShouldCatchErrorsOnPhase('onCreateExternalArtifact', () => ({
+          pluginId: 'testPlugin',
+          artifactName: 'example',
+          artifactPath: '/tmp/path/to/artifact',
         }));
 
         itShouldCatchErrorsOnPhase('onBeforeShutdownDevice', () => ({
@@ -406,17 +440,18 @@ describe('ArtifactsManager', () => {
       });
     });
 
-    describe('onUserAction', () => {
-      it('should call onUserAction in plugins', async () => {
-        const actionInfo = {
-          type: 'takeScreenshot',
-          options: {
-            name: 'open app',
-          },
-        };
+    describe('onCreateExternalArtifact', () => {
+      it('should call onCreateExternalArtifact in a specific plugin', async () => {
+        await artifactsManager.onCreateExternalArtifact({
+          pluginId: 'testPlugin',
+          artifactPath: '/tmp/path/to/artifact',
+          artifactName: 'Example',
+        });
 
-        await artifactsManager.onUserAction(actionInfo);
-        expect(testPlugin.onUserAction).toHaveBeenCalledWith(actionInfo);
+        expect(testPlugin.onCreateExternalArtifact).toHaveBeenCalledWith({
+          artifact: expect.any(Object),
+          name: 'Example',
+        });
       });
     });
 
