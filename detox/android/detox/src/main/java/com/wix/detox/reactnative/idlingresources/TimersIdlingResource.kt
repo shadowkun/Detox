@@ -2,42 +2,12 @@ package com.wix.detox.reactnative.idlingresources
 
 import android.view.Choreographer
 import androidx.test.espresso.IdlingResource
-import com.facebook.react.bridge.ReactContext
-import com.facebook.react.modules.core.Timing
-import org.joor.Reflect
-import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 const val BUSY_WINDOW_THRESHOLD = 1500
 
-class TimerReflected(timer: Any) {
-    private var reflected = Reflect.on(timer)
-
-    val isRepeating: Boolean
-        get() = reflected.field("mRepeat").get()
-
-    val interval: Int
-        get() = reflected.field("mInterval").get()
-
-    val targetTime: Long
-        get() = reflected.field("mTargetTime").get()
-}
-
-class TimingModuleReflected(reactContext: ReactContext) {
-    private var nativeModule = reactContext.getNativeModule(Timing::class.java)
-
-    val timersQueue: PriorityQueue<Any>
-        get() = Reflect.on(nativeModule).field("mTimers").get()
-
-    val timersLock: Any
-        get() = Reflect.on(nativeModule).field("mTimerGuard").get()
-
-    operator fun component1() = timersQueue
-    operator fun component2() = timersLock
-}
-
 class TimersIdlingResource @JvmOverloads constructor(
-        private val reactContext: ReactContext,
+        private val interrogationStrategy: IdleInterrogationStrategy,
         private val getChoreographer: () -> Choreographer = { Choreographer.getInstance() }
     ) : IdlingResource, Choreographer.FrameCallback {
 
@@ -56,8 +26,7 @@ class TimersIdlingResource @JvmOverloads constructor(
             return true
         }
 
-        return checkIdle().apply {
-            val result = this
+        return checkIdle().also { result ->
             if (result) {
                 callback?.onTransitionToIdle()
             } else {
@@ -81,32 +50,5 @@ class TimersIdlingResource @JvmOverloads constructor(
         paused.set(false)
     }
 
-    private fun checkIdle(): Boolean {
-        val (timersQueue, timersLock) = TimingModuleReflected(reactContext)
-        synchronized(timersLock) {
-            val nextTimer = timersQueue.peek()
-            nextTimer?.let {
-                return !isTimerInBusyWindow(it) && !hasBusyTimers(timersQueue)
-            }
-            return true
-        }
-    }
-
-    private fun isTimerInBusyWindow(timer: Any): Boolean {
-        val timerReflected = TimerReflected(timer)
-        return when {
-            timerReflected.isRepeating -> false
-            timerReflected.interval > BUSY_WINDOW_THRESHOLD -> false
-            else -> true
-        }
-    }
-
-    private fun hasBusyTimers(timersQueue: PriorityQueue<Any>): Boolean {
-        timersQueue.forEach {
-            if (isTimerInBusyWindow(it)) {
-                return true
-            }
-        }
-        return false
-    }
+    private fun checkIdle() = interrogationStrategy.isIdleNow()
 }
